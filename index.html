@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="css/theme/custom.css" id="theme">
 
     <!-- Code syntax highlighting -->
-    <link rel="stylesheet" href="lib/css/zenburn.css">
+    <link rel="stylesheet" href="lib/css/custom.css">
 
     <!-- Printing and PDF exports -->
     <script>
@@ -34,9 +34,9 @@
       <div class="slides">
         <section>
           <h1>py.test</h1>
-          <h3>продвинутое использование</h3>
+          <h3>Advanced usage</h3>
           <p>
-            Андрей Светлов
+            Andrew Svetlov
             <p>
               <small>http://asvetlov.blogspot.com</small><br>
               <small>andrew.svetlov@gmail.com</small>
@@ -55,9 +55,8 @@
           </section>
           <section data-markdown>
             <script type="text/template">
-## Примитивы
-
-```python
+              <h2>Basics</h2>
+              <pre><code>
 import pytest
 
 def test_a():
@@ -70,12 +69,12 @@ class TestB:
     def test_c(self):
         with pytest.raises(ZeroDivisionError):
             1/0
-```
+              </code></pre>
             </script>
           </section>
 
           <section>
-            <h2>Запуск</h2>
+            <h2>Running</h2>
             <pre><code>$ py.test -k "(a or B) and not c"</code></pre>
           </section>
 
@@ -110,9 +109,8 @@ def test_port(unique_port):
         </section>
         <section data-markdown>
           <script type="text/template">
-## Освобождение ресурсов
-
-```python
+            <h2>Resource cleanup</h2>
+            <pre><code>
 import asyncio
 
 @pytest.yield_fixture
@@ -126,25 +124,21 @@ def loop():
         loop.call_soon(loop.stop)
         loop.run_forever()
         loop.close()
-```
-
-```python
+            </code></pre>
+            <pre class="fragment"><code>
 def test_loop(loop):
     fut = asyncio.Future(loop=loop)
     loop.call_soon(fut.set_result, 1)
     ret = loop.run_until_complete(fut)
     assert ret == 1
-```
-<!-- .element: class="fragment" -->
-
+            </code></pre>
           </script>
         </section>
         <section>
           <section data-markdown>
             <script type="text/template">
-## Fixture factory
-
-```
+              <h2>Fixture factory</h2>
+              <pre><code>
 @pytest.fixture()
 def unused_port():
     def factory():
@@ -152,15 +146,13 @@ def unused_port():
             s.bind(('127.0.0.1', 0))
             return s.getsockname()[1]
     return factory
+              </code></pre>
 
-```
-
-```python
+              <pre class="fragment"><code>
 def test_unused_port(unused_port):
-    print(unused_port())  # NB: скобки!
-    print(unused_port())  # другое значение
-```
-<!-- .element: class="fragment" -->
+    print(unused_port())  # NB: brackets!
+    print(unused_port())  # Another value
+              </code></pre>
             </script>
           </section>
           <section data-markdown>
