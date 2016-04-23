@@ -34,7 +34,7 @@
       <div class="slides">
         <section>
           <h1>py.test</h1>
-          <h3>Advanced usage</h3>
+          <h2>Advanced usage</h2>
           <p>
             Andrew Svetlov
             <p>
@@ -51,12 +51,14 @@
           <p>Guido van Rossum</p>
         </section>
         <section>
+          <section>
+            <h1>Basics</h1>
+          </section>
           <section data-background="Jupiter_bayan_accordion.jpg" data-background-size="60%">
           </section>
-          <section data-markdown>
-            <script type="text/template">
-              <h2>Basics</h2>
-              <pre><code>
+          <section>
+            <h2>Basics</h2>
+            <pre><code>
 import pytest
 
 def test_a():
@@ -69,303 +71,243 @@ class TestB:
     def test_c(self):
         with pytest.raises(ZeroDivisionError):
             1/0
-              </code></pre>
-            </script>
+            </code></pre>
           </section>
-
           <section>
             <h2>Running</h2>
             <pre><code>$ py.test -k "(a or B) and not c"</code></pre>
           </section>
-
         </section>
 
         <section>
+          <section>
+            <h1>Fixtures</h1>
+          </section>
           <section data-background="fixture.jpg" data-background-size="60%">
           </section>
-          <section data-markdown>
-            <script type="text/template">
-## Fixture
-
-```python
-import socket
-
-@pytest.fixture()
-def unique_port():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('127.0.0.1', 0))
-        return s.getsockname()[1]
-
-```
-
-```python
-def test_port(unique_port):
-    print(unique_port)
-```
-<!-- .element: class="fragment" -->
-
-            </script>
-          </section>
-        </section>
-        <section data-markdown>
-          <script type="text/template">
-            <h2>Resource cleanup</h2>
+          <section>
+            <h2>Fixture</h2>
             <pre><code>
-import asyncio
+import random
 
-@pytest.yield_fixture
-def loop():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(None)
-
-    yield loop
-
-    if not loop.is_closed():
-        loop.call_soon(loop.stop)
-        loop.run_forever()
-        loop.close()
+@pytest.fixture
+def rnd():
+    return random.random()
             </code></pre>
             <pre class="fragment"><code>
-def test_loop(loop):
-    fut = asyncio.Future(loop=loop)
-    loop.call_soon(fut.set_result, 1)
-    ret = loop.run_until_complete(fut)
-    assert ret == 1
+def test_rnd(rnd):
+    print(rnd)
             </code></pre>
-          </script>
-        </section>
-        <section>
-          <section data-markdown>
-            <script type="text/template">
-              <h2>Fixture factory</h2>
-              <pre><code>
-@pytest.fixture()
-def unused_port():
-    def factory():
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(('127.0.0.1', 0))
-            return s.getsockname()[1]
-    return factory
-              </code></pre>
-
-              <pre class="fragment"><code>
-def test_unused_port(unused_port):
-    print(unused_port())  # NB: brackets!
-    print(unused_port())  # Another value
-              </code></pre>
-            </script>
           </section>
-          <section data-markdown>
-            <script type="text/template">
-## Фабрика с параметрами
+          <section>
+            <h2>Fixture dependencies</h2>
+            <pre><code>
+@pytest.fixture
+def rnd_gen():
+    return random.Random(123456)
 
-```python
+
+@pytest.fixture
+def rnd(rnd_gen):
+    return rnd_gen.random()
+            </code></pre>
+          </section>
+          <section>
+            <h2>Fixture calculation</h2>
+            <pre><code>
+@pytest.fixture
+def fixture_a(rnd):
+    return rnd
+
+@pytest.fixture
+def fixture_b(rnd):
+    return rnd
+
+def test(fixture_a, fixture_b):
+    assert fixture_a == fixture_b  # ???
+            </code></pre>
+          </section>
+          <section>
+            <h2>Fixture factories</h2>
+            <pre><code>
+@pytest.fixture
+def make_rnd(rnd_gen):
+    def maker()
+        return rnd_gen.random()
+    return maker
+            </code></pre>
+            <pre class="fragment"><code>
+@pytest.fixture
+def fixture_a(rnd):
+    return rnd()
+
+@pytest.fixture
+def fixture_b(rnd):
+    return rnd()
+
+def test(fixture_a, fixture_b):
+    assert fixture_a == fixture_b  # ???
+              </code></pre>
+            </code></pre>
+          </section>
+          <section>
+            <h2>Resource cleanup</h2>
+            <pre><code>
 @pytest.yield_fixture
-def create_server(loop, unused_port):
-    srv = None
-    async def create(*, ssl_ctx=None):
-        nonlocal srv
-        port = unused_port()
-        srv = await make_server(loop, port, ssl_ctx)
-        proto = 'https' is ssl_ctx else 'http'
-        url = "{}://127.0.0.1:{}".format(proto, port)
-        return app, url
-    yield create
-    async def finish():
-        srv.close()
-        await srv.wait_closed()
-    loop.run_until_complete(finish())
-```
-
-            </script>
+def opened_file():
+    f = open("filename")
+    yield f
+    f.close()
+            </code></pre>
+            <pre class="fragment"><code>
+def test_a(opened_file):
+    assert opened_file.read() == "file content"
+            </code></pre>
           </section>
-          <section data-markdown>
-            <script type="text/template">
-## Использование фабрики с параметрами
-
-```python
-def test_create_server(create_server, loop):
-    app, url = loop.run_until_complete(
-        create_server(ssl_ctx=None))
-```
-
-Фууу!!! <!-- .element: class="fragment" -->
-
-            </script>
-          </section>
-          <section data-markdown>
-            <script type="text/template">
-## Выглядит как гуано
-
-Хочу `await`!!!
-
-```python
-def test_create_server(create_server):
-    app, url = await create_server(ssl_ctx=None)
-```
-            </script>
-          </section>
-        </section>
-        <section data-markdown>
-          <script type="text/template">
-## conftest.py
-
-```python
-pytest_plugins = ['asyncio_fixtures', 'controller_fixtures',
-    'log_fixtures', 'redis_fixtures', 'statsd_fixtures']
-```
-
-###И никаких `import` инструкций.
-          </script>
-        </section>
-        <section>
           <section>
-            <h2>Плагины</h2>
-            <h3>или</h3>
-            <h2>Сеанс ч<span style="text-decoration: underline;">о</span>рной магии</h2>
-          </section>
-          <section data-background="vudu.jpg" data-background-size="60%">
-          </section>
-          <section data-markdown>
-            <script type="text/template">
-## Добавляем пометку
-
-```python
-@pytest.mark.run_loop
-def test_create_server(create_server):
-    app, url = await create_server(ssl_ctx=None)
-```
-            </script>
-          </section>
-
-          <section data-markdown>
-            <script type="text/template">
-## Перегружаем создание теста
-
-```python
-@pytest.mark.tryfirst
-def pytest_pycollect_makeitem(collector, name, obj):
-    if collector.funcnamefilter(name):
-        item = pytest.Function(name, parent=collector)
-        if 'run_loop' in item.keywords:
-            return list(collector._genfunctions(name, obj))
-```
-            </script>
-          </section>
-
-          <section data-markdown>
-            <script type="text/template">
-## Перегружаем запуск теста
-
-```python
-@pytest.mark.tryfirst
-def pytest_pyfunc_call(pyfuncitem):
-    if 'run_loop' in pyfuncitem.keywords:
-        funcargs = pyfuncitem.funcargs
-        loop = funcargs['loop']
-        testargs = {arg: funcargs[arg]
-                    for arg in pyfuncitem._fixtureinfo.argnames}
-        loop.run_until_complete(pyfuncitem.obj(**testargs))
-        return True
-```
-            </script>
-          </section>
-          <section data-markdown>
-            <script type="text/template">
-## Добавляем к тесту loop fixture если ещё нету
-
-```python
-def pytest_runtest_setup(item):
-    if 'run_loop' in item.keywords:
-        if 'loop' not in item.fixturenames:
-            item.fixturenames.append('loop')
-```
-            </script>
-          </section>
-
-          <section data-markdown>
-            <script type="text/template">
-##Profit!!! &#x1F601;
-
-```python
-@pytest.mark.run_loop
-def test_create_server():
-    await asyncio.sleep(0.1)
-```
-            </script>
+            <h2>Cleanup for factories</h2>
+            <pre><code>
+@pytest.yield_fixture
+def open_file():
+    f = None
+    def opener(filename):
+        nonlocal f
+        assert f is None
+        f = open(filename)
+        return f
+    yield opener
+    if f is not None:
+        f.close()
+            </code></pre>
+            <pre class="fragment"><code>
+def test_a(open_file):
+    assert open_file.read("file_a.txt") == "Content A"
+    assert open_file.read("file_b.txt") == "Content B"
+            </code></pre>
           </section>
         </section>
         <section>
           <section>
-            <h2>Рулим из командной строки</h2>
+            <h1>Comparison with unittest</h1>
           </section>
-          <section data-background="commandline.jpg" data-background-size="60%">
-          </section>
-
-          <section data-markdown>
-            <script type="text/template">
-## Добавляем новый параметр
-```python
-def pytest_addoption(parser):
-    parser.addoption('--gc-collect', action='store_true',
-                     default=False,
-                     help="Perform GC collection after every test")
-
-```
-            </script>
-          </section>
-
-          <section data-markdown>
-            <script type="text/template">
-## Подкручиваем завершение теста
-```python
-@pytest.mark.trylast
-def pytest_runtest_teardown(item, nextitem):
-    if item.config.getoption('--gc-collect'):
-        gc.collect()
-    return nextitem
-```
-            </script>
-          </section>
-
           <section>
-            <h2>Profit!!! &#x1F607;</h2>
-            <pre><code>$ py.test --gc-collect</code></pre>
+            <h2>Monolitic test case</h2>
+            <pre><code>
+class TestA(unittest.TestCase):
+    def setUp(self):
+        self.redis = redis.Redis()
+        self.db = db.connect(':memory:')
+
+    def tearDown(self):
+        self.redis.close()
+        self.db.close()
+
+    def test_a(self):
+        self.db.execute(...)
+        self.redis.set(...)
+            </code></pre>
           </section>
+          <section>
+            <h2>Mixin classes</h2>
+            <pre><code>
+class RedisMixin:
+    def setUp(self):
+        self.redis = Redis()
+        super().setUp()
+    def tearDown(self):
+        self.redis.close()
+        super().tearDown()
 
-          <section data-markdown>
-            <script type="text/template">
-## Пропуск долгих тестов
-```python
-def pytest_addoption(parser):
-    parser.addoption('--run-slow', action='store_true',
-                     default=False,
-                     help="Run slow tests")
+class DBMixin:
+    def setUp(self):
+        self.db = sqlite3.connect(':memory:')
+        super().setUp()
+    def tearDown(self):
+        self.db.close()
+        super().tearDown()
+            </code></pre>
+          </section>
+          <section>
+            <pre><code>
+class TestA(RedisMixin, DBMixin, unittest.TestCase):
+    def setUp(self):
+        self.val = 'value'
+        super().setUp()
 
-def pytest_runtest_setup(item):
-    if ('slowtest' in item.keywords and
-            (not item.config.getoption('--run-slow'))):
-        pytest.skip('Need --run-slow to run')
-```
+    def tearDown(self):
+        ...
+        super().tearDown()
 
-```python
-@pytest.mark.slowtest
-def test_xxx():
-    ...
-```
-<!-- .element: class="fragment" -->
+    def test_a(self):
+        self.db.execute(...)
+        self.redis.set(...)
+            </code></pre>
+          </section>
+          <section>
+            <h2>py.test</h2>
+            <pre><code>
+@pytest.yield_fixture
+def redis():
+    with Redis() as redis:
+        yield redis
 
-```
-py.test --run-slow
-```
-<!-- .element: class="fragment" -->
-            </script>
+@pytest.yield_fixture
+def db():
+    with sqlite.connect(':memory:') as db:
+        yield db
+
+def test_a(db, redis):
+    db.execute(...)
+    redis.set(...)
+            </code></pre>
           </section>
         </section>
-
         <section>
           <section>
-            <h2>Docker и тесты</h2>
+            <h1>Project structure</h1>
+          </section>
+          <section>
+            <ul>
+              <li><b>root</b></li>
+              <ul>
+                <li><b>project</b></li>
+                <ul>
+                  <li>__init__.py</li>
+                  <li>...</li>
+                </ul>
+                <li><b>tests</b></li>
+                <ul>
+                  <li><i>conftest.py</i></li>
+                  <li><i>redis_fixtures.py</i></li>
+                  <li><i>db_fixtures.py</i></li>
+                  <li>test_a.py</li>
+                </ul>
+                <li><i>setup.py</i></li>
+              </ul>
+            </ul>
+            <p class="fragment">
+              <b>No <i>__init__.py</i> in <i>tests</i> folder</b>
+            </p>
+          </section>
+          <section>
+            <h2>conftest.py</h2>
+            <pre><code>
+import pytest
+
+pytest_plugins = ['redis_fixtures', 'db_fixtures']
+
+@pytest.fixture
+def fixture_a():
+    return 'value'
+            </code></pre>
+            <p class="fragment">
+              <b>No fixture imports in <i>conftest.py</i></b>
+            </p>
+          </section>
+        </section>
+        <section>
+          <section>
+            <h2>Docker and tests</h2>
           </section>
           <section data-background="docker.jpg" data-background-size="60%">
           </section>
@@ -380,28 +322,29 @@ py.test --run-slow
             </ul>
           </section>
 
-          <section data-markdown>>
-            <script type="text/template">
-## Уникальный ID и docker client
-```python
+          <section>
+            <h2> Unique ID and docker client</h2>
+            <pre><code>
 import docker as libdocker
+import socket
 import uuid
 
 @pytest.fixture(scope='session')
 def session_id():
     return str(uuid.uuid4())
-
-
+@pytest.yield_fixture(scope='session')
+def unused_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('127.0.0.1', 0))
+        yield s.getsockname()[1]
 @pytest.fixture(scope='session')
 def docker():
     return libdocker.Client(version='auto')
-```
-            </script>
-        </section>
-        <section data-markdown>>
-          <script type="text/template">
-## Запуск контейнера
-```python
+            </code></pre>
+          </section>
+          <section>
+            <h2>Running container</h2>
+            <pre><code>
 @pytest.yield_fixture(scope='session')
 def redis_server(unused_port, session_id, docker):
     docker.pull('redis')
@@ -417,42 +360,171 @@ def redis_server(unused_port, session_id, docker):
     yield port
     docker.kill(container=container['Id'])
     docker.remove_container(container['Id'])
-            ```
-          </script>
-        </section>
-        <section data-markdown>>
-          <script type="text/template">
-## Создание клиента
-```python
-@pytest.fixture
+            </code></pre>
+          </section>
+          <section>
+            <h2>Redis client</h2>
+            <pre><code>
+@pytest.yield_fixture
 def redis_client(redis_server):
     for i in range(100):
     try:
         client = redis.StrictRedis(host='127.0.0.1',
                                    port=port, db=0)
-        client.get('some_key')
-        return client
+        client.flushall()
     except redis.ConnectionError:
         time.sleep(0.01)
-```
-          </script>
-        </section>
+    else:
+        yield client
+        client.close()
+            </code></pre>
+          </section>
 
-        <section data-markdown>>
-          <script type="text/template">
-## Тест
-```python
+          <section>
+            <h2>Test</h2>
+            <pre><code>
 def test_redis(redis_client):
     redis_client.set(b'key', b'value')
     assert redis_client.get(b'key') == b'value'
-```
-          </script>
+            </code></pre>
+          </section>
+        </section>
+        <section>
+          <section>
+            <h1>Plugins</h1>
+          </section>
+          <section data-background="vudu.jpg" data-background-size="60%">
+          </section>
+          <section>
+            <h2>Test skipping</h2>
+            <pre><code>
+@pytest.mark.skipif(sys.version_info < (3, 4, 1),
+                    reason="Python<3.4.1 doesnt support "
+                           "__del__ calls from GC")
+def test___del__():
+    ...
+            </code></pre>
+          </section>
+          <section>
+            <h2>Test exclusion</h2>
+            <pre><code>
+def pytest_ignore_collect(path, config):
+    if 'py35' in str(path):
+        if sys.version_info < (3, 5, 0):
+            return True
+            </code></pre>
+            <ul class="fragment">
+              <li><b>tests</b></li>
+              <ul>
+                <li>conftest.py</li>
+                <li>...</li>
+                <li><b>py35</b></li>
+                <ul>
+                  <li>test_1.py</li>
+                  <li>test_2.py</li>
+                </ul>
+          </section>
+
+        </section>
+        <section data-background="commandline.jpg" data-background-size="60%">
+        </section>
+          <section>
+            <h2>Add new cmdline argument</h2>
+            <pre><code>
+def pytest_addoption(parser):
+    parser.addoption('--gc-collect', action='store_true',
+                     default=False,
+                     help="Perform GC collection after every test")
+
+@pytest.mark.trylast
+def pytest_runtest_teardown(item, nextitem):
+    if item.config.getoption('--gc-collect'):
+        gc.collect()
+    return nextitem
+            </code></pre>
+            <pre class="fragment"><code>$ py.test --gc-collect</code></pre>
+          </section>
+          <section>
+            <h2>Fixture parametrization</h2>
+            <pre><code>
+@pytest.yield_fixture(scope='session', params=['2.8', '3.0'])
+def redis_server(unused_port, session_id, docker, request):
+    redis_version = request.param
+    image = 'redis:{}'.format(redis_version)
+    docker.pull(image)
+    container = docker.create_container(
+        image=image,
+        name='test-redis-{}-{}'.format(redis_version, session_id),
+        ...)
+
+    ...
+            </code></pre>
+          </section>
+          <section>
+            <h2>Fixture generation</h2>
+            <pre><code>
+def pytest_addoption(parser):
+    parser.addoption("--redis_version", action="append", default=[],
+                     help=("Redis server versions. "
+                           "May be used several times. "
+                           "Available values: 2.8, 3.0, all"))
+def pytest_generate_tests(metafunc):
+    if 'redis_version' in metafunc.fixturenames:
+        tags = set(metafunc.config.option.redis_version)
+        if not tags:
+            tags = ['3.0']
+        elif 'all' in tags:
+            tags = ['2.8', '3.0']
+        else:
+            tags = list(tags)
+        metafunc.parametrize("redis_versions", tags, scope='session')
+            </code></pre>
+          </section>
+          <section>
+            <h2>Using generated funcarg</h2>
+            <pre><code>
+@pytest.yield_fixture(scope='session')
+def redis_server(unused_port, session_id, docker, redis_version):
+    image = 'redis:{}'.format(redis_version)
+    docker.pull(image)
+    container = docker.create_container(
+        image=image,
+        name='test-redis-{}-{}'.format(redis_version, session_id),
+        ...)
+
+    ...
+            </code></pre>
+          </section>
+
+          <section>
+            <h2>Skip long-running tests</h2>
+            <pre><code>
+def pytest_addoption(parser):
+    parser.addoption('--run-slow', action='store_true',
+                     default=False,
+                     help="Run slow tests")
+
+def pytest_runtest_setup(item):
+    if ('slowtest' in item.keywords and
+            (not item.config.getoption('--run-slow'))):
+        pytest.skip('Need --run-slow to run')
+
+@pytest.mark.slowtest
+def test_xxx():
+    ...
+            </code></pre>
+
+            <pre><code>
+py.test --run-slow
+              </code></pre>
+            </script>
+          </section>
         </section>
 
         <section>
-          <h1>Вопросы?</h1>
+          <h1>Questions?</h1>
           <p>
-            Андрей Светлов
+            Andrew Svetlov
             <p>
             <small>http://asvetlov.blogspot.com</small><br>
             <small>andrew.svetlov@gmail.com</small>
