@@ -182,8 +182,8 @@ def open_file():
             </code></pre>
             <pre class="fragment"><code>
 def test_a(open_file):
-    assert open_file.read("file_a.txt") == "Content A"
-    assert open_file.read("file_b.txt") == "Content B"
+    assert open_file("file_a.txt").read() == "Content A"
+    assert open_file("file_b.txt").read() == "Content B"
             </code></pre>
           </section>
         </section>
